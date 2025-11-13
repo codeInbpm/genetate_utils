@@ -8,6 +8,11 @@ import com.itextpdf.text.pdf.parser.Vector;
 import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -191,8 +196,19 @@ public class PdfUtil7 {
     }
 
 
-    // ---------------------- 字体加载（系统路径 + IDENTITY_H，支持中文无额外 JAR） ----------------------
+    // ---------------------- 字体加载（优先服务器 PingFang.ttc，fallback 本地系统字体，IDENTITY_H 支持中文） ----------------------
     static BaseFont loadChineseFont(String osType) throws DocumentException, IOException {
+        // 优先尝试从服务器加载 PingFang.ttc
+        String serverFontPath = tryLoadServerFont();
+        if (serverFontPath != null) {
+            try {
+                return BaseFont.createFont(serverFontPath + ",0", BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+            } catch (Exception ignored) {
+                System.err.println("服务器字体加载失败，回退到本地字体");
+            }
+        }
+
+        // Fallback 到本地字体
         List<String> fallbackFonts = new ArrayList<>();
         // Mac: Hiragino (Simplified Chinese, index 0 for Regular) + Arial Unicode (fallback, .ttf)
         if ("mac".equalsIgnoreCase(osType)) {
@@ -210,7 +226,42 @@ public class PdfUtil7 {
                 return BaseFont.createFont(fontPath, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
             } catch (Exception ignored) {}
         }
-        throw new IOException("字体加载失败");
+        throw new IOException("所有字体加载失败");
+    }
+
+    // 辅助方法：尝试从服务器下载字体并创建临时文件，返回临时路径（或 null 若失败）
+    private static String tryLoadServerFont() {
+        try {
+            URL url = new URL("http://139.224.27.132:9001/browser/other-bucket/2025-06-12%2FPingFang.ttc");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000); // 5秒超时
+            conn.setReadTimeout(10000); // 10秒读取超时
+
+            try (InputStream is = conn.getInputStream()) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = is.read(buffer)) != -1) {
+                    baos.write(buffer, 0, len);
+                }
+                byte[] fontBytes = baos.toByteArray();
+
+                if (fontBytes.length == 0) {
+                    return null;
+                }
+
+                java.io.File tempFile = java.io.File.createTempFile("pingfang", ".ttc");
+                tempFile.deleteOnExit();
+                Files.write(Paths.get(tempFile.getAbsolutePath()), fontBytes);
+
+                System.out.println("服务器字体下载成功，临时路径: " + tempFile.getAbsolutePath());
+                return tempFile.getAbsolutePath();
+            }
+        } catch (Exception e) {
+            System.err.println("服务器字体下载失败: " + e.getMessage());
+            return null;
+        }
     }
 
     // ---------------------- 替换占位符（精确覆盖原文本区域 + 完整行高） ----------------------

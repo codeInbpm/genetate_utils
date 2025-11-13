@@ -1,8 +1,8 @@
 package com.example.filter;
 
 import cn.hutool.core.util.StrUtil;
-import com.pig4cloud.pig.common.log.filter.dto.RequestWrapper;
-import com.pig4cloud.pig.common.log.filter.dto.ResponseWrapper;
+import com.example.filter.dto.RequestWrapper;
+import com.example.filter.dto.ResponseWrapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletOutputStream;
